@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#f5f5f7">
+  <link rel="manifest" href="manifest.json">
+  <title>习惯追踪</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div id="app">
+    <!-- Timer Banner -->
+    <div id="timer-banner" class="timer-banner hidden">
+      <div class="timer-banner-content">
+        <span class="timer-banner-dot"></span>
+        <span class="timer-banner-label">计时中</span>
+        <span class="timer-banner-module"></span>
+        <span class="timer-banner-time">00:00:00</span>
+      </div>
+      <button class="timer-banner-stop" id="btn-stop-timer">停止</button>
+    </div>
+
+    <!-- Tab Content -->
+    <main id="tab-content">
+      <!-- Tab 1: Record -->
+      <section id="tab-record" class="tab-panel active">
+        <div class="tab-header">
+          <h1>📝 记录</h1>
+          <span class="tab-date" id="record-date"></span>
+        </div>
+        <div class="module-grid" id="module-grid"></div>
+        <div class="section-header">
+          <h3>今日记录</h3>
+        </div>
+        <div class="records-list" id="today-records"></div>
+        <div class="empty-state hidden" id="records-empty">
+          <p>今天还没有记录</p>
+          <p class="empty-hint">点击上方模块卡片开始</p>
+        </div>
+      </section>
+
+      <!-- Tab 2: Calendar -->
+      <section id="tab-calendar" class="tab-panel">
+        <div class="tab-header">
+          <h1>📅 日历</h1>
+          <button class="btn-icon" id="btn-calendar-add">+</button>
+        </div>
+        <div class="calendar-nav">
+          <button class="btn-icon" id="btn-prev-day">&lt;</button>
+          <div class="calendar-date-display">
+            <span id="calendar-date-text"></span>
+            <button class="btn-today" id="btn-today">今天</button>
+          </div>
+          <button class="btn-icon" id="btn-next-day">&gt;</button>
+        </div>
+        <div class="project-reminders" id="project-reminders"></div>
+        <div class="timeline-container" id="timeline-container">
+          <div class="timeline" id="timeline"></div>
+        </div>
+      </section>
+
+      <!-- Tab 3: Stats -->
+      <section id="tab-stats" class="tab-panel">
+        <div class="tab-header">
+          <h1>📊 统计</h1>
+        </div>
+        <div class="stats-range">
+          <button class="range-btn active" data-range="day">日</button>
+          <button class="range-btn" data-range="week">周</button>
+          <button class="range-btn" data-range="month">月</button>
+          <button class="range-btn" data-range="year">年</button>
+        </div>
+        <div class="stats-summary" id="stats-summary"></div>
+        <div class="chart-container">
+          <canvas id="pie-chart"></canvas>
+        </div>
+        <div class="chart-container">
+          <canvas id="bar-chart"></canvas>
+        </div>
+      </section>
+
+      <!-- Tab 4: Projects -->
+      <section id="tab-projects" class="tab-panel">
+        <div class="tab-header">
+          <h1>📂 项目</h1>
+          <button class="btn-icon" id="btn-new-project">+</button>
+        </div>
+        <div class="project-tabs">
+          <button class="project-tab-btn active" data-filter="active">进行中</button>
+          <button class="project-tab-btn" data-filter="completed">已完成</button>
+        </div>
+        <div class="project-list" id="project-list"></div>
+        <div class="empty-state hidden" id="projects-empty">
+          <p>还没有项目</p>
+          <p class="empty-hint">点击右上角 + 创建新项目</p>
+        </div>
+      </section>
+
+      <!-- Tab 5: Settings -->
+      <section id="tab-settings" class="tab-panel">
+        <div class="tab-header">
+          <h1>⚙️ 管理</h1>
+        </div>
+        <div class="section-header">
+          <h3>模块管理</h3>
+        </div>
+        <div class="module-manage-list" id="module-manage-list"></div>
+        <button class="btn-secondary full-width" id="btn-add-module">+ 添加自定义模块</button>
+        <div class="section-header">
+          <h3>数据管理</h3>
+        </div>
+        <div class="data-actions">
+          <button class="btn-secondary" id="btn-export">📤 导出数据 (JSON)</button>
+          <button class="btn-secondary" id="btn-import">📥 导入数据 (JSON)</button>
+        </div>
+        <input type="file" id="import-file" accept=".json" class="hidden-important">
+      </section>
+    </main>
+
+    <!-- Bottom Navigation -->
+    <nav id="bottom-nav">
+      <button class="nav-btn active" data-tab="0">
+        <span class="nav-icon">📝</span>
+        <span class="nav-label">记录</span>
+      </button>
+      <button class="nav-btn" data-tab="1">
+        <span class="nav-icon">📅</span>
+        <span class="nav-label">日历</span>
+      </button>
+      <button class="nav-btn" data-tab="2">
+        <span class="nav-icon">📊</span>
+        <span class="nav-label">统计</span>
+      </button>
+      <button class="nav-btn" data-tab="3">
+        <span class="nav-icon">📂</span>
+        <span class="nav-label">项目</span>
+      </button>
+      <button class="nav-btn" data-tab="4">
+        <span class="nav-icon">⚙️</span>
+        <span class="nav-label">管理</span>
+      </button>
+    </nav>
+
+    <!-- Modal Overlay -->
+    <div id="modal-overlay" class="modal-overlay hidden">
+      <div class="modal" id="modal-content"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
