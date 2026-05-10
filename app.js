@@ -35,7 +35,31 @@ function saveData(key, data) {
 }
 
 function getModules() {
-  return loadData(STORAGE_KEYS.modules, DEFAULT_MODULES);
+  var stored = loadData(STORAGE_KEYS.modules, null);
+  if (stored === null) return structuredClone(DEFAULT_MODULES);
+
+  // Merge any new preset modules that don't exist in stored data yet
+  var storedIds = {};
+  stored.forEach(function(m) { storedIds[m.id] = true; });
+  var changed = false;
+  DEFAULT_MODULES.forEach(function(dm) {
+    if (!storedIds[dm.id]) {
+      stored.push(structuredClone(dm));
+      changed = true;
+    }
+  });
+  // Also ensure instant fields exist on presets (migration)
+  stored.forEach(function(m) {
+    DEFAULT_MODULES.forEach(function(dm) {
+      if (m.id === dm.id && dm.instant && !m.instant) {
+        m.instant = dm.instant;
+        m.instantMin = dm.instantMin;
+        changed = true;
+      }
+    });
+  });
+  if (changed) saveData(STORAGE_KEYS.modules, stored);
+  return stored;
 }
 
 function saveModules(modules) {
@@ -295,7 +319,40 @@ function pullFromGist() {
 
 function setupGistSync(token) {
   updateSyncStatus('syncing');
-  // Create a new gist
+
+  // First, search for an existing gist to avoid creating duplicates
+  fetch('https://api.github.com/gists?per_page=100', {
+    headers: {
+      'Authorization': 'Bearer ' + token,
+      'Accept': 'application/vnd.github.v3+json'
+    }
+  }).then(function(res) {
+    if (!res.ok) throw new Error('search failed');
+    return res.json();
+  }).then(function(gists) {
+    var existing = gists.find(function(g) {
+      return g.description === '习惯追踪数据' &&
+        g.files && g.files['habit-tracker-data.json'];
+    });
+    if (existing) {
+      // Reuse existing gist from another device
+      saveSyncConfig({ token: token, gistId: existing.id });
+      updateSyncStatus('synced');
+      showToast('已连接现有同步数据 ✓');
+      renderSettingsTab();
+      return pullFromGist().then(function(updated) {
+        if (updated) { renderRecordTab(); renderCalendarTab(); }
+      });
+    }
+    // No existing gist, create new one
+    return doCreateGist(token);
+  }).catch(function() {
+    // Search failed, try creating new gist
+    return doCreateGist(token);
+  });
+}
+
+function doCreateGist(token) {
   var meta = getMeta();
   var payload = {
     version: 1,
@@ -305,7 +362,7 @@ function setupGistSync(token) {
     projects: getProjects()
   };
 
-  fetch('https://api.github.com/gists', {
+  return fetch('https://api.github.com/gists', {
     method: 'POST',
     headers: {
       'Authorization': 'Bearer ' + token,
@@ -325,11 +382,11 @@ function setupGistSync(token) {
   }).then(function(gist) {
     saveSyncConfig({ token: token, gistId: gist.id });
     updateSyncStatus('synced');
-    showToast('GitHub 同步已连接');
+    showToast('GitHub 同步已连接 ✓');
     renderSettingsTab();
-  }).catch(function(err) {
+  }).catch(function() {
     updateSyncStatus('error');
-    showToast('连接失败，请检查 Token 是否正确（需要 gist 权限）');
+    showToast('连接失败，请检查 Token（需要 gist 权限）');
   });
 }
 
@@ -398,6 +455,15 @@ function formatDateStr(date) {
   var m = String(date.getMonth() + 1).padStart(2, '0');
   var d = String(date.getDate()).padStart(2, '0');
   return y + '-' + m + '-' + d;
+}
+
+function formatStatsShort(ms) {
+  if (ms < 0) ms = 0;
+  var totalMin = Math.round(ms / 60000);
+  if (totalMin < 60) return totalMin + 'm';
+  var h = Math.floor(totalMin / 60);
+  var m = totalMin % 60;
+  return h + 'h' + (m > 0 ? ' ' + m + 'm' : '');
 }
 
 function formatDateShort(date) {
@@ -1113,7 +1179,7 @@ function renderStatsTab() {
 
   // Summary cards
   document.getElementById('stats-summary').innerHTML =
-    '<div class="stat-card"><div class="stat-card-value">' + formatDuration(totalDuration).replace(/[hm].*$/, 'h') + '</div><div class="stat-card-label">总时长</div></div>' +
+    '<div class="stat-card"><div class="stat-card-value">' + formatStatsShort(totalDuration) + '</div><div class="stat-card-label">总时长</div></div>' +
     '<div class="stat-card"><div class="stat-card-value">' + activeModules + '</div><div class="stat-card-label">活跃模块</div></div>' +
     '<div class="stat-card"><div class="stat-card-value">' + records.length + '</div><div class="stat-card-label">记录条数</div></div>';
 
