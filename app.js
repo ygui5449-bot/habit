@@ -317,10 +317,22 @@ function pullFromGist() {
   });
 }
 
-function setupGistSync(token) {
+function setupGistSync(token, gistId) {
   updateSyncStatus('syncing');
 
-  // First, search for an existing gist to avoid creating duplicates
+  // If user provided a Gist ID, connect directly
+  if (gistId) {
+    saveSyncConfig({ token: token, gistId: gistId });
+    updateSyncStatus('synced');
+    showToast('已连接 Gist ✓');
+    renderSettingsTab();
+    return pullFromGist().then(function(updated) {
+      if (updated) { renderRecordTab(); renderCalendarTab(); showToast('数据已同步 ✓'); }
+      else { showToast('未发现新数据，可能 Gist ID 不正确'); }
+    });
+  }
+
+  // No Gist ID provided — search existing gists
   fetch('https://api.github.com/gists?per_page=100', {
     headers: {
       'Authorization': 'Bearer ' + token,
@@ -335,7 +347,6 @@ function setupGistSync(token) {
         g.files && g.files['habit-tracker-data.json'];
     });
     if (existing) {
-      // Reuse existing gist from another device
       saveSyncConfig({ token: token, gistId: existing.id });
       updateSyncStatus('synced');
       showToast('已连接现有同步数据 ✓');
@@ -344,11 +355,12 @@ function setupGistSync(token) {
         if (updated) { renderRecordTab(); renderCalendarTab(); }
       });
     }
-    // No existing gist, create new one
     return doCreateGist(token);
   }).catch(function() {
-    // Search failed, try creating new gist
-    return doCreateGist(token);
+    // Search failed — create new gist and tell user
+    return doCreateGist(token).then(function() {
+      showToast('已创建新 Gist，请在另一台设备上用此 Gist ID 连接');
+    });
   });
 }
 
@@ -1051,8 +1063,32 @@ document.getElementById('btn-today').addEventListener('click', function() {
   renderCalendarTab();
 });
 
-// Tap empty slot -> add record
+// Tap empty slot -> add record, tap block -> view details
 document.getElementById('timeline').addEventListener('click', function(e) {
+  // Click on a time block -> show details
+  var block = e.target.closest('.week-block');
+  if (block) {
+    var recordId = block.dataset.record;
+    var records = getRecords();
+    var rec = records.find(function(r) { return r.id === recordId; });
+    if (rec) {
+      var mod = getModuleById(rec.moduleId) || { name: '?', icon: '📌', color: '#999' };
+      var startD = new Date(rec.startTime);
+      var endD = new Date(rec.endTime);
+      showModal(
+        '<div class="modal-title">' + mod.icon + ' ' + mod.name + '</div>' +
+        '<div style="text-align:center;padding:12px 0">' +
+          '<div style="font-size:24px;font-weight:700;margin-bottom:4px">' + formatDuration(endD.getTime() - startD.getTime()) + '</div>' +
+          '<div style="font-size:14px;color:var(--text-secondary)">' + formatDateStr(startD) + '</div>' +
+          '<div style="font-size:14px;color:var(--text-secondary)">' + formatTimeStr(startD) + ' - ' + formatTimeStr(endD) + '</div>' +
+          (rec.note ? '<div style="margin-top:12px;padding:12px;background:var(--bg);border-radius:10px;font-size:14px;text-align:left">📝 ' + rec.note + '</div>' : '<div style="margin-top:8px;color:var(--text-tertiary);font-size:13px">无备注</div>') +
+        '</div>' +
+        '<button class="modal-close" onclick="hideModal()">关闭</button>'
+      );
+    }
+    return;
+  }
+
   var slot = e.target.closest('.week-slot');
   if (!slot) return;
   var dayIdx = parseInt(slot.dataset.dayIdx);
@@ -1455,11 +1491,11 @@ function renderSettingsTab() {
       '<span class="module-manage-icon">' + mod.icon + '</span>' +
       '<div class="module-manage-info">' +
         '<div class="module-manage-name">' + mod.name + '</div>' +
-        '<div class="module-manage-meta">' + (mod.isPreset ? '预设模块 · 不可删除' : '自定义模块') + '</div>' +
+        '<div class="module-manage-meta">' + (mod.isPreset ? '预设模块' : '自定义模块') + '</div>' +
       '</div>' +
       '<div class="module-manage-actions">' +
-        (!mod.isPreset ? '<button class="module-manage-edit" data-edit-module="' + mod.id + '">✏️</button>' : '') +
-        (!mod.isPreset ? '<button class="module-manage-delete" data-delete-module="' + mod.id + '">🗑️</button>' : '') +
+        '<button class="module-manage-edit" data-edit-module="' + mod.id + '">✏️</button>' +
+        '<button class="module-manage-delete" data-delete-module="' + mod.id + '">🗑️</button>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -1473,6 +1509,7 @@ function renderSettingsTab() {
     btnAdd.parentNode.insertBefore(syncSection, btnAdd.nextElementSibling);
   }
   var configured = isSyncConfigured();
+  var cfg = getSyncConfig();
   var statusMap = { idle: '', syncing: '同步中...', synced: '✓ 已同步', error: '⚠ 同步失败' };
   syncSection.innerHTML =
     '<div class="section-header"><h3>☁️ 云同步 (GitHub Gist)</h3>' +
@@ -1480,7 +1517,8 @@ function renderSettingsTab() {
     '</div>' +
     (configured ?
       '<div class="sync-card connected">' +
-        '<p>✅ 已连接 GitHub Gist · 数据自动同步中</p>' +
+        '<p>✅ 已连接 · <b>Gist:</b> <code style="font-size:11px;word-break:break-all">' + cfg.gistId + '</code></p>' +
+        '<p style="font-size:12px;color:var(--text-secondary);margin-top:4px">在其他设备上输入此 Gist ID 即可配对同步</p>' +
         '<button class="btn-secondary" id="btn-disconnect-sync" style="margin-top:8px">断开连接</button>' +
       '</div>' :
       '<div class="sync-card">' +
@@ -1534,8 +1572,13 @@ function showSyncSetupModal() {
       '<label>GitHub Personal Access Token</label>' +
       '<input type="password" id="sync-token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">' +
       '<p style="font-size:12px;color:var(--text-secondary);margin-top:6px">' +
-        '需要 <b>gist</b> 权限。创建方式：GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token → 勾选 <b>gist</b> → 生成后粘贴到这里' +
-      '</p>' +
+        '需要 <b>gist</b> 权限。创建方式：GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token → 勾选 <b>gist</b></p>' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<label>Gist ID（可选）</label>' +
+      '<input type="text" id="sync-gist-id" placeholder="留空则自动搜索或创建">' +
+      '<p style="font-size:12px;color:var(--text-secondary);margin-top:4px">' +
+        '如果你已在其他设备上设置过同步，粘贴第一台设备上显示的 Gist ID 即可配对</p>' +
     '</div>' +
     '<button class="form-submit" id="btn-sync-connect">连接</button>' +
     '<button class="modal-close" onclick="hideModal()">取消</button>'
@@ -1642,8 +1685,9 @@ document.getElementById('modal-content').addEventListener('click', function(e) {
   if (e.target.id === 'btn-sync-connect') {
     var token = document.getElementById('sync-token').value.trim();
     if (!token) { showToast('请输入 GitHub Token'); return; }
+    var gistId = document.getElementById('sync-gist-id').value.trim();
     hideModal();
-    setupGistSync(token);
+    setupGistSync(token, gistId || null);
   }
 });
 
