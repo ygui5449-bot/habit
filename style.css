@@ -594,7 +594,7 @@ body {
 }
 
 .week-time-label {
-  height: 44px;
+  height: 56px;
   display: flex;
   align-items: flex-start;
   justify-content: flex-end;
@@ -617,7 +617,7 @@ body {
 }
 
 .week-slot {
-  height: 44px;
+  height: 56px;
   border-bottom: 0.5px solid var(--border-separator);
   cursor: pointer;
 }

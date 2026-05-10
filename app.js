@@ -882,7 +882,7 @@ document.getElementById('today-records').addEventListener('click', function(e) {
 /* ==================== TAB 2: CALENDAR ==================== */
 /* ==================== TAB 2: CALENDAR (WEEK VIEW) ==================== */
 var WEEK_COL_W = 48; // column width
-var HOUR_H = 44;     // hour row height
+var HOUR_H = 56;     // hour row height (px per hour)
 
 function getWeekDays() {
   var days = [];
@@ -977,7 +977,7 @@ function renderWeekGrid(days) {
       icon: mod.icon,
       color: mod.color,
       topPx: (startMin / 60) * HOUR_H,
-      heightPx: Math.max(((endMin - startMin) / 60) * HOUR_H, 18),
+      heightPx: Math.max(((endMin - startMin) / 60) * HOUR_H, 6),
       startTime: formatTimeStr(startD),
       endTime: formatTimeStr(endD),
       note: rec.note || ''
