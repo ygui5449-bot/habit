@@ -477,7 +477,7 @@ body {
   display: none !important;
 }
 
-/* ==================== CALENDAR ==================== */
+/* ==================== CALENDAR (WEEK VIEW) ==================== */
 .calendar-nav {
   display: flex;
   align-items: center;
@@ -493,128 +493,190 @@ body {
 }
 
 #calendar-date-text {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
 }
 
 .project-reminders {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .reminder-banner {
   background: #fff3cd;
-  border-radius: var(--radius-sm);
-  padding: 10px 14px;
-  font-size: 13px;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
   color: #856404;
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
+  gap: 6px;
+  margin-bottom: 4px;
 }
 
+/* Week Grid */
 .timeline-container {
-  overflow-y: auto;
-  max-height: calc(100vh - 280px);
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
   border-radius: var(--radius-sm);
   background: var(--card-bg);
   box-shadow: var(--shadow-sm);
 }
 
 .timeline {
-  position: relative;
-  min-height: 1152px; /* 24 * 48px */
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: calc(100vh - 260px);
+  -webkit-overflow-scrolling: touch;
 }
 
-.timeline-hour-row {
-  height: 48px;
-  border-bottom: 0.5px solid var(--border-separator);
-  display: flex;
-  position: relative;
-}
-
-.timeline-hour-label {
-  width: 44px;
-  font-size: 11px;
-  color: var(--text-tertiary);
-  text-align: right;
-  padding: 2px 8px 0 0;
-  flex-shrink: 0;
-  font-weight: 500;
-}
-
-.timeline-hour-slot {
-  flex: 1;
-  position: relative;
-}
-
-.timeline-hour-row:last-child .timeline-hour-slot {
-  border-bottom: none;
-}
-
-.timeline-block {
-  position: absolute;
-  left: 4px;
-  right: 4px;
-  border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #fff;
-  overflow: hidden;
-  cursor: pointer;
-  z-index: 2;
+.week-grid {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+  min-width: 388px; /* 40 + 7*48 + some */
 }
 
-.timeline-block-name {
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.week-col-headers {
+  display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border);
 }
 
-.timeline-block-time {
+.week-time-spacer {
+  width: 40px;
+  flex-shrink: 0;
+}
+
+.week-day-header {
+  width: 48px;
+  text-align: center;
+  padding: 10px 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.week-day-header.today {
+  background: var(--accent-light);
+  border-radius: 8px 8px 0 0;
+}
+
+.week-day-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.week-day-header.today .week-day-name {
+  color: var(--accent);
+}
+
+.week-day-date {
   font-size: 10px;
-  opacity: 0.85;
+  color: var(--text-tertiary);
+  margin-top: 1px;
+}
+
+.week-day-header.today .week-day-date {
+  color: var(--accent);
+}
+
+.week-body {
+  display: flex;
+  position: relative;
+}
+
+.week-time-col {
+  width: 40px;
+  flex-shrink: 0;
+}
+
+.week-time-label {
+  height: 44px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 0 6px 0 0;
+  font-size: 10px;
+  color: var(--text-tertiary);
   font-weight: 500;
+  border-bottom: 0.5px solid var(--border-separator);
 }
 
-.timeline-slot-tap {
-  position: absolute;
-  inset: 1px 4px;
-  border-radius: 6px;
+.week-day-cols {
+  display: flex;
+  position: relative;
+}
+
+.week-day-col {
+  width: 48px;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.week-slot {
+  height: 44px;
+  border-bottom: 0.5px solid var(--border-separator);
   cursor: pointer;
-  z-index: 1;
 }
 
-.timeline-slot-tap:active {
-  background: rgba(0,122,255,0.08);
+.week-slot:active {
+  background: rgba(0,122,255,0.06);
 }
 
-.timeline-current-line {
+.week-blocks-layer {
   position: absolute;
-  left: 44px;
+  top: 0;
+  left: 40px;
   right: 0;
-  height: 1.5px;
-  background: var(--danger);
-  z-index: 3;
+  bottom: 0;
   pointer-events: none;
 }
 
-.timeline-current-line::before {
-  content: '';
+.week-block {
   position: absolute;
-  left: -6px;
-  top: -4px;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
+  width: 44px;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+  z-index: 2;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.week-block-name {
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.week-now-line {
+  position: absolute;
+  height: 2px;
   background: var(--danger);
+  z-index: 4;
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+/* ==================== RECORD NOTE ==================== */
+.record-item-note {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  font-style: italic;
+  padding-left: 2px;
 }
 
 /* ==================== STATS ==================== */

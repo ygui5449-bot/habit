@@ -12,7 +12,9 @@ const DEFAULT_MODULES = [
   { id: 'reading', name: '读书', icon: '📚', color: '#9C27B0', isPreset: true },
   { id: 'experiment', name: '做实验', icon: '🔬', color: '#FF9800', isPreset: true },
   { id: 'study', name: '学习', icon: '✏️', color: '#3F51B5', isPreset: true },
-  { id: 'work', name: '工作', icon: '💼', color: '#F44336', isPreset: true }
+  { id: 'work', name: '工作', icon: '💼', color: '#F44336', isPreset: true },
+  { id: 'rest', name: '休息', icon: '🛌', color: '#8BC34A', isPreset: true, instant: true, instantMin: 5 },
+  { id: 'entertainment', name: '娱乐', icon: '🎮', color: '#E91E63', isPreset: true, instant: true, instantMin: 30 }
 ];
 
 const ICON_OPTIONS = ['📖', '🏃', '📚', '🔬', '✏️', '💼', '🎵', '🎮', '🍳', '🧘', '💻', '🎨', '📝', '🌍', '🧪', '🏠', '🛒', '🐱', '🌱', '✈️'];
@@ -79,10 +81,17 @@ function saveRecords(records) {
 function addRecord(record) {
   var records = getRecords();
   record.id = 'rec_' + Date.now();
+  record.note = record.note || '';
   record.createdAt = new Date().toISOString();
   records.unshift(record);
   saveRecords(records);
   return record;
+}
+
+function updateRecordNote(id, note) {
+  var records = getRecords();
+  var rec = records.find(function(r) { return r.id === id; });
+  if (rec) { rec.note = note; saveRecords(records); }
 }
 
 function deleteRecord(id) {
@@ -371,7 +380,7 @@ var state = {
   activeTab: 0,
   activeTimer: null,    // { moduleId, startTime }
   timerInterval: null,
-  calendarDate: new Date(),
+  calendarWeekStart: getMonday(new Date()),
   statsRange: 'day'
 };
 
@@ -389,6 +398,19 @@ function formatDateStr(date) {
   var m = String(date.getMonth() + 1).padStart(2, '0');
   var d = String(date.getDate()).padStart(2, '0');
   return y + '-' + m + '-' + d;
+}
+
+function formatDateShort(date) {
+  return (date.getMonth() + 1) + '/' + date.getDate();
+}
+
+function getMonday(date) {
+  var d = new Date(date);
+  var day = d.getDay();
+  var diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
 function formatTimeStr(date) {
@@ -461,6 +483,34 @@ function hideModal() {
   document.getElementById('modal-overlay').classList.add('hidden');
 }
 
+function showNoteModal(recordId, mod) {
+  if (!mod) return;
+  showModal(
+    '<div class="modal-title">' + mod.icon + ' ' + mod.name + ' — 添加备注</div>' +
+    '<div class="form-group"><textarea id="note-input" placeholder="记录一下这次做了什么...（可选）"></textarea></div>' +
+    '<button class="form-submit" id="btn-note-save" data-record="' + recordId + '">保存</button>' +
+    '<button class="modal-close" id="btn-note-skip" data-record="' + recordId + '">跳过</button>'
+  );
+}
+
+// Note modal actions (delegated)
+document.getElementById('modal-content').addEventListener('click', function(e) {
+  if (e.target.id === 'btn-note-save') {
+    var recordId = e.target.dataset.record;
+    var note = document.getElementById('note-input').value.trim();
+    if (note) updateRecordNote(recordId, note);
+    hideModal();
+    renderRecordTab();
+    showToast('记录已保存');
+    return;
+  }
+  if (e.target.id === 'btn-note-skip') {
+    hideModal();
+    showToast('记录已保存');
+    return;
+  }
+});
+
 document.getElementById('modal-overlay').addEventListener('click', function(e) {
   if (e.target === this) hideModal();
 });
@@ -495,8 +545,9 @@ function stopTimer() {
   var startTime = state.activeTimer.startTime;
   var endTime = nowISO();
   var moduleId = state.activeTimer.moduleId;
+  var mod = getModuleById(moduleId);
 
-  addRecord({
+  var rec = addRecord({
     moduleId: moduleId,
     startTime: startTime,
     endTime: endTime,
@@ -505,7 +556,7 @@ function stopTimer() {
 
   clearActiveTimer();
   renderRecordTab();
-  showToast('已记录 ' + (getModuleById(moduleId) || {}).name || '');
+  showNoteModal(rec.id, mod);
 }
 
 function clearActiveTimer() {
@@ -623,6 +674,7 @@ function renderRecordTab() {
         '<div class="record-item-info">' +
           '<div class="record-item-module">' + mod.icon + ' ' + mod.name + '</div>' +
           '<div class="record-item-time">' + formatTimeStr(startD) + ' - ' + formatTimeStr(endD) + '</div>' +
+          (rec.note ? '<div class="record-item-note">' + rec.note + '</div>' : '') +
         '</div>' +
         '<div class="record-item-duration">' + formatDuration(dur) + '</div>' +
         '<button class="record-item-delete" data-delete="' + rec.id + '">✕</button>' +
@@ -638,6 +690,26 @@ document.getElementById('module-grid').addEventListener('click', function(e) {
   var moduleId = card.dataset.module;
   var mod = getModuleById(moduleId);
   if (!mod) return;
+
+  // Instant modules: one-click record
+  if (mod.instant) {
+    var now = new Date();
+    var startTime = new Date(now.getTime() - mod.instantMin * 60000);
+    var rec = addRecord({
+      moduleId: moduleId,
+      startTime: startTime.toISOString(),
+      endTime: now.toISOString(),
+      type: 'instant'
+    });
+    renderRecordTab();
+    // Show note modal for 娱乐
+    if (moduleId === 'entertainment') {
+      showNoteModal(rec.id, mod);
+    } else {
+      showToast(mod.name + ' +' + mod.instantMin + 'min');
+    }
+    return;
+  }
 
   showModal(
     '<div class="modal-title">' + mod.icon + ' ' + mod.name + '</div>' +
@@ -706,7 +778,7 @@ document.getElementById('modal-content').addEventListener('click', function(e) {
     return;
   }
 
-  addRecord({
+  var rec = addRecord({
     moduleId: moduleId,
     startTime: new Date(startTime).toISOString(),
     endTime: new Date(endTime).toISOString(),
@@ -715,7 +787,8 @@ document.getElementById('modal-content').addEventListener('click', function(e) {
 
   hideModal();
   renderRecordTab();
-  showToast('记录已添加');
+  var mod = getModuleById(moduleId);
+  showNoteModal(rec.id, mod);
 });
 
 // Delete record
@@ -729,35 +802,57 @@ document.getElementById('today-records').addEventListener('click', function(e) {
 });
 
 /* ==================== TAB 2: CALENDAR ==================== */
+/* ==================== TAB 2: CALENDAR (WEEK VIEW) ==================== */
+var WEEK_COL_W = 48; // column width
+var HOUR_H = 44;     // hour row height
+
+function getWeekDays() {
+  var days = [];
+  var mon = new Date(state.calendarWeekStart);
+  for (var i = 0; i < 7; i++) {
+    var d = new Date(mon);
+    d.setDate(mon.getDate() + i);
+    days.push(d);
+  }
+  return days;
+}
+
 function renderCalendarTab() {
-  var date = state.calendarDate;
-  var dateStr = formatDateStr(date);
-  document.getElementById('calendar-date-text').textContent = formatDateCN(dateStr) + ' ' + getWeekdayCN(date);
+  var days = getWeekDays();
+  var mon = days[0];
+  var sun = days[6];
+
+  document.getElementById('calendar-date-text').textContent =
+    formatDateShort(mon) + ' - ' + formatDateShort(sun);
 
   // Show/hide today button
   var todayBtn = document.getElementById('btn-today');
-  if (dateStr === todayStr()) {
+  var today = new Date();
+  if (today >= mon && today <= new Date(sun.getTime() + 86400000)) {
     todayBtn.style.display = 'none';
   } else {
     todayBtn.style.display = '';
   }
 
-  // Project reminders
-  renderProjectReminders(dateStr);
+  // Project reminders for the week
+  renderProjectReminders(days);
 
-  // Timeline
-  renderTimeline(dateStr);
+  // Render week grid
+  renderWeekGrid(days);
 }
 
-function renderProjectReminders(dateStr) {
+function renderProjectReminders(days) {
   var container = document.getElementById('project-reminders');
   var projects = getProjects().filter(function(p) { return p.status === 'active'; });
-  var date = new Date(dateStr + 'T00:00:00');
-  var weekday = date.getDay(); // 0=Sun ... 6=Sat
+  var reminders = [];
 
-  var reminders = projects.filter(function(p) {
-    if (!p.weekDays || p.weekDays.length === 0) return false;
-    return p.weekDays.indexOf(weekday) !== -1;
+  days.forEach(function(day) {
+    var weekday = day.getDay();
+    projects.forEach(function(p) {
+      if (p.weekDays && p.weekDays.indexOf(weekday) !== -1) {
+        reminders.push({ project: p, date: day });
+      }
+    });
   });
 
   if (reminders.length === 0) {
@@ -765,133 +860,143 @@ function renderProjectReminders(dateStr) {
     return;
   }
 
-  container.innerHTML = reminders.map(function(p) {
-    return '<div class="reminder-banner">' +
-      '📌 ' + p.title + ' — 今日计划 ' + (p.dailyGoal || '?') + ' 分钟' +
-      '</div>';
+  container.innerHTML = reminders.slice(0, 3).map(function(r) {
+    return '<div class="reminder-banner">📌 ' +
+      r.project.title + ' — ' + formatDateShort(r.date) + ' · ' +
+      (r.project.dailyGoal || '?') + 'min</div>';
   }).join('');
 }
 
-function renderTimeline(dateStr) {
+function renderWeekGrid(days) {
   var timeline = document.getElementById('timeline');
+  var now = new Date();
+  var todayStrVal = formatDateStr(now);
+
+  // Gather all records for this week
+  var weekStartStr = formatDateStr(days[0]);
+  var weekEndStr = formatDateStr(days[6]);
   var records = getRecords().filter(function(r) {
-    return r.startTime && r.startTime.startsWith(dateStr) && r.endTime;
+    if (!r.startTime || !r.endTime) return false;
+    var d = r.startTime.substring(0, 10);
+    return d >= weekStartStr && d <= weekEndStr;
   });
 
-  // Build time blocks
-  var blocks = records.map(function(rec) {
-    var mod = getModuleById(rec.moduleId) || { name: '未知', color: '#999', icon: '📌' };
+  // Build block data
+  var blockData = [];
+  records.forEach(function(rec) {
+    var mod = getModuleById(rec.moduleId) || { name: '?', color: '#999', icon: '📌' };
     var startD = new Date(rec.startTime);
     var endD = new Date(rec.endTime);
+    var dayIdx = Math.floor((startD.getTime() - days[0].getTime()) / 86400000);
+    if (dayIdx < 0 || dayIdx > 6) return;
     var startMin = startD.getHours() * 60 + startD.getMinutes();
     var endMin = endD.getHours() * 60 + endD.getMinutes();
-    if (endMin <= startMin) endMin = startMin + 1; // minimum 1 min
-    return {
+    if (endMin <= startMin) endMin = startMin + 1;
+    blockData.push({
       id: rec.id,
+      dayIdx: dayIdx,
       name: mod.name,
       icon: mod.icon,
       color: mod.color,
-      startMin: startMin,
-      endMin: endMin,
+      topPx: (startMin / 60) * HOUR_H,
+      heightPx: Math.max(((endMin - startMin) / 60) * HOUR_H, 18),
       startTime: formatTimeStr(startD),
-      endTime: formatTimeStr(endD)
-    };
+      endTime: formatTimeStr(endD),
+      note: rec.note || ''
+    });
   });
 
-  var html = '';
+  var html = '<div class="week-grid">';
 
-  // Hour rows
-  for (var h = 0; h < 24; h++) {
-    html += '<div class="timeline-hour-row">' +
-      '<div class="timeline-hour-label">' + String(h).padStart(2, '0') + ':00</div>' +
-      '<div class="timeline-hour-slot" data-hour="' + h + '"></div>' +
+  // Column headers
+  var dayNames = ['一', '二', '三', '四', '五', '六', '日'];
+  html += '<div class="week-col-headers">';
+  html += '<div class="week-time-spacer"></div>';
+  for (var i = 0; i < 7; i++) {
+    var isToday = formatDateStr(days[i]) === todayStrVal;
+    html += '<div class="week-day-header' + (isToday ? ' today' : '') + '">' +
+      '<span class="week-day-name">' + dayNames[i] + '</span>' +
+      '<span class="week-day-date">' + formatDateShort(days[i]) + '</span>' +
       '</div>';
   }
+  html += '</div>';
 
-  // Current time line (only for today)
-  var currentLineTop = -10;
-  if (dateStr === todayStr()) {
-    var now = new Date();
-    var nowMin = now.getHours() * 60 + now.getMinutes();
-    currentLineTop = (nowMin / 60) * 48;
+  // Body: hour rows with 7 columns each
+  html += '<div class="week-body">';
+  html += '<div class="week-time-col">';
+  for (var h = 0; h < 24; h++) {
+    html += '<div class="week-time-label">' + String(h).padStart(2, '0') + ':00</div>';
   }
+  html += '</div>';
+
+  // Day columns with slots
+  html += '<div class="week-day-cols">';
+  for (var di = 0; di < 7; di++) {
+    html += '<div class="week-day-col" data-day-idx="' + di + '" data-date="' + formatDateStr(days[di]) + '">';
+    for (var h = 0; h < 24; h++) {
+      html += '<div class="week-slot" data-day-idx="' + di + '" data-hour="' + h + '"></div>';
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // Blocks layer
+  html += '<div class="week-blocks-layer">';
+  blockData.forEach(function(b) {
+    var leftPx = b.dayIdx * WEEK_COL_W;
+    var noteIcon = b.note ? '📝' : '';
+    html += '<div class="week-block" style="left:' + leftPx + 'px;top:' + b.topPx + 'px;height:' + b.heightPx + 'px;background:' + b.color + ';" data-record="' + b.id + '">' +
+      '<span class="week-block-name">' + b.icon + noteIcon + '</span>' +
+      '</div>';
+  });
+  html += '</div>';
+
+  html += '</div>'; // week-body
+  html += '</div>'; // week-grid
 
   timeline.innerHTML = html;
 
-  // Add blocks
-  var slotEls = timeline.querySelectorAll('.timeline-hour-slot');
-  blocks.forEach(function(block) {
-    var startHour = Math.floor(block.startMin / 60);
-    var topPx = (block.startMin / 60) * 48;
-    var heightPx = ((block.endMin - block.startMin) / 60) * 48;
-    if (heightPx < 20) heightPx = 20;
-
-    var blockEl = document.createElement('div');
-    blockEl.className = 'timeline-block';
-    blockEl.style.cssText = 'top:' + topPx + 'px; height:' + heightPx + 'px; background:' + block.color + ';';
-    blockEl.innerHTML = '<span class="timeline-block-name">' + block.icon + ' ' + block.name + '</span>' +
-      '<span class="timeline-block-time">' + block.startTime + ' - ' + block.endTime + '</span>';
-    blockEl.dataset.recordId = block.id;
-    timeline.appendChild(blockEl);
-  });
-
   // Current time line
-  if (currentLineTop >= 0) {
-    var line = document.createElement('div');
-    line.className = 'timeline-current-line';
-    line.style.top = currentLineTop + 'px';
-    timeline.appendChild(line);
-  }
-
-  // Scroll to current time
-  if (dateStr === todayStr() && currentLineTop > 0) {
-    setTimeout(function() {
-      var container = document.getElementById('timeline-container');
-      var scrollTo = currentLineTop - 120;
-      if (scrollTo > 0) container.scrollTop = scrollTo;
-    }, 100);
+  if (todayStrVal >= weekStartStr && todayStrVal <= weekEndStr) {
+    var nowMin = now.getHours() * 60 + now.getMinutes();
+    var todayIdx = days.findIndex(function(d) { return formatDateStr(d) === todayStrVal; });
+    if (todayIdx >= 0) {
+      var lineEl = document.createElement('div');
+      lineEl.className = 'week-now-line';
+      lineEl.style.cssText = 'left:' + (todayIdx * WEEK_COL_W) + 'px;top:' + ((nowMin / 60) * HOUR_H) + 'px;width:' + WEEK_COL_W + 'px;';
+      timeline.querySelector('.week-blocks-layer').appendChild(lineEl);
+    }
   }
 }
 
-// Calendar navigation
+// Calendar navigation (week)
 document.getElementById('btn-prev-day').addEventListener('click', function() {
-  state.calendarDate.setDate(state.calendarDate.getDate() - 1);
+  state.calendarWeekStart.setDate(state.calendarWeekStart.getDate() - 7);
   renderCalendarTab();
 });
 
 document.getElementById('btn-next-day').addEventListener('click', function() {
-  state.calendarDate.setDate(state.calendarDate.getDate() + 1);
+  state.calendarWeekStart.setDate(state.calendarWeekStart.getDate() + 7);
   renderCalendarTab();
 });
 
 document.getElementById('btn-today').addEventListener('click', function() {
-  state.calendarDate = new Date();
+  state.calendarWeekStart = getMonday(new Date());
   renderCalendarTab();
 });
 
-// Tap empty slot in timeline to add record
+// Tap empty slot -> add record
 document.getElementById('timeline').addEventListener('click', function(e) {
-  var slot = e.target.closest('.timeline-hour-slot');
+  var slot = e.target.closest('.week-slot');
   if (!slot) return;
+  var dayIdx = parseInt(slot.dataset.dayIdx);
   var hour = parseInt(slot.dataset.hour);
-  var date = state.calendarDate;
-  var dateStr = formatDateStr(date);
+  var dateStr = slot.parentElement.dataset.date;
+  var nowDt = new Date();
+  var defaultStart = String(hour).padStart(2, '0') + ':00';
+  var defaultEnd = String(Math.min(hour + 1, 23)).padStart(2, '0') + ':00';
 
-  // Calculate approximate minute based on click position
-  var rect = slot.getBoundingClientRect();
-  var clickY = e.clientY - rect.top;
-  var minuteFraction = Math.floor((clickY / 48) * 60);
-  var startMin = hour * 60 + minuteFraction;
-
-  var startH = Math.floor(startMin / 60);
-  var startM = startMin % 60;
-  var endH = Math.floor((startMin + 60) / 60);
-  var endM = (startMin + 60) % 60;
-  var defaultStart = String(startH).padStart(2, '0') + ':' + String(startM).padStart(2, '0');
-  var defaultEnd = String(endH).padStart(2, '0') + ':' + String(endM).padStart(2, '0');
-
-  var modules = getModules();
-  var moduleOptions = modules.map(function(m) {
+  var moduleOptions = getModules().map(function(m) {
     return '<option value="' + m.id + '">' + m.icon + ' ' + m.name + '</option>';
   }).join('');
 
@@ -905,14 +1010,13 @@ document.getElementById('timeline').addEventListener('click', function(e) {
   );
 });
 
-// Calendar add button at top
+// Calendar add button — use today's date in current week
 document.getElementById('btn-calendar-add').addEventListener('click', function() {
-  var dateStr = formatDateStr(state.calendarDate);
   var now = new Date();
+  var dateStr = formatDateStr(now);
   var defaultStart = formatTimeStr(new Date(now.getTime() - 3600000));
   var defaultEnd = formatTimeStr(now);
-  var modules = getModules();
-  var moduleOptions = modules.map(function(m) {
+  var moduleOptions = getModules().map(function(m) {
     return '<option value="' + m.id + '">' + m.icon + ' ' + m.name + '</option>';
   }).join('');
 
@@ -943,7 +1047,7 @@ document.getElementById('modal-content').addEventListener('click', function(e) {
     return;
   }
 
-  addRecord({
+  var rec = addRecord({
     moduleId: moduleId,
     startTime: new Date(startTime).toISOString(),
     endTime: new Date(endTime).toISOString(),
@@ -952,7 +1056,8 @@ document.getElementById('modal-content').addEventListener('click', function(e) {
 
   hideModal();
   renderCalendarTab();
-  showToast('日程已添加');
+  var mod = getModuleById(moduleId);
+  showNoteModal(rec.id, mod);
 });
 
 /* ==================== TAB 3: STATS ==================== */
